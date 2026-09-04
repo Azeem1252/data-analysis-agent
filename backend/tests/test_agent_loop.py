@@ -121,3 +121,23 @@ def test_agent_loop_exhausts_retries():
     assert result["attempts"] == 3
     assert "unable to complete the analysis after 3 attempts" in result["answer"]
     assert "SyntaxError" in result["answer"]
+
+
+def test_agent_loop_refuses_off_topic_query():
+    # When an off-topic question is asked, the agent directly returns the refusal message
+    refusal_text = "I can only answer questions related to your uploaded spreadsheet dataset. Please ask a question about the data."
+    agent = MockAgent([
+        {
+            "messages": [
+                AIMessage(content=refusal_text)
+            ]
+        }
+    ])
+
+    result = run_with_self_correction(agent, "Who was the first president of the United States?", [])
+
+    assert result["attempts"] == 1
+    assert "only answer questions related to your uploaded spreadsheet dataset" in result["answer"]
+    assert result["figure_json"] is None
+    assert result["code_run"] is None
+

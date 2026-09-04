@@ -159,7 +159,8 @@ async function resetSession() {
    ═══════════════════════════════════════════════════════════════ */
 async function sendQuery() {
   const q = queryInput.value.trim();
-  if (!q || state.isQuerying || !state.sessionId) return;
+  if (!q || state.isQuerying) return;
+  if (!state.sessionId) { showToast("Please upload a spreadsheet first."); return; }
   state.isQuerying = true; btnSend.disabled = true;
   queryInput.value = ""; autoResize();
   appendMsg("user", q);
@@ -209,7 +210,7 @@ function appendMsg(role, text, meta = {}) {
     chartDiv.id = id;
     body.appendChild(chartDiv);
     try {
-      const fig = JSON.parse(meta.figureJson);
+      const fig = typeof meta.figureJson === "string" ? JSON.parse(meta.figureJson) : meta.figureJson;
       const L = fig.layout || {};
       L.paper_bgcolor = "rgba(0,0,0,0)";
       L.plot_bgcolor  = "rgba(11,18,33,0.6)";
@@ -315,7 +316,13 @@ function autoResize() {
 /* ═══════════════════════════════════════════════════════════════
    Events
    ═══════════════════════════════════════════════════════════════ */
-fileInput.addEventListener("change", (e) => { if (e.target.files[0]) uploadFile(e.target.files[0]); });
+fileInput.addEventListener("change", (e) => {
+  if (e.target.files[0]) {
+    const f = e.target.files[0];
+    fileInput.value = "";
+    uploadFile(f);
+  }
+});
 
 uploadArea.addEventListener("dragover", (e) => { e.preventDefault(); uploadArea.classList.add("dragover"); });
 uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));

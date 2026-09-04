@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Any, Optional
 import pandas as pd
 from langchain.agents import create_agent
 
@@ -42,9 +42,13 @@ def get_llm():
         )
 
 
-def build_agent(df: pd.DataFrame, profile_str: str):
+def build_agent(df: pd.DataFrame, profile_str: str, pickle_path: Optional[str] = None):
     llm = get_llm()
-    exec_tool = make_execute_python_tool(df, settings.sandbox_timeout_seconds)
+    exec_tool = make_execute_python_tool(
+        df,
+        sandbox_timeout=settings.sandbox_timeout_seconds,
+        pickle_path=pickle_path,
+    )
     agent = create_agent(
         model=llm,
         tools=[exec_tool],

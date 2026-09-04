@@ -1,3 +1,6 @@
+import os
+import pickle
+import tempfile
 import time
 import uuid
 from threading import Lock
@@ -15,12 +18,22 @@ class SessionManager:
         self._lock = Lock()
         self.ttl = ttl_minutes * 60
 
-    def create(self, df: pd.DataFrame, profile: dict[str, Any]) -> str:
+    def create(self, df: pd.DataFrame, profile: dict[str, Any], profile_str: str = "") -> str:
         sid = str(uuid.uuid4())
+        
+        # Pre-serialize DataFrame once per session to avoid disk/serialization overhead on each turn
+        tmp = tempfile.NamedTemporaryFile(suffix=".pkl", delete=False)
+        pickle_path = tmp.name
+        tmp.close()
+        with open(pickle_path, "wb") as f:
+            pickle.dump(df, f)
+
         with self._lock:
             self._store[sid] = {
                 "df": df,
                 "profile": profile,
+                "profile_str": profile_str,
+                "pickle_path": pickle_path,
                 "history": [],
                 "created": time.time(),
                 "last_active": time.time(),
@@ -44,9 +57,18 @@ class SessionManager:
     def delete(self, sid: str) -> bool:
         with self._lock:
             if sid in self._store:
+                self._cleanup_session(self._store[sid])
                 del self._store[sid]
                 return True
             return False
+
+    def _cleanup_session(self, session_data: dict[str, Any]) -> None:
+        pickle_path = session_data.get("pickle_path")
+        if pickle_path and os.path.exists(pickle_path):
+            try:
+                os.remove(pickle_path)
+            except OSError:
+                pass
 
     def _evict_expired(self) -> None:
         now = time.time()
@@ -56,6 +78,7 @@ class SessionManager:
                 if now - v.get("last_active", v.get("created", 0)) > self.ttl
             ]
             for sid in expired_keys:
+                self._cleanup_session(self._store[sid])
                 del self._store[sid]
 
 

@@ -90,7 +90,8 @@ async def upload_dataset(file: UploadFile = File(...)):
 
     profiler = SchemaProfiler(df)
     profile = profiler.profile()
-    session_id = session_manager.create(df, profile)
+    profile_str = profiler.to_prompt_string()
+    session_id = session_manager.create(df, profile, profile_str=profile_str)
 
     return UploadResponse(
         session_id=session_id,
@@ -103,6 +104,10 @@ async def upload_dataset(file: UploadFile = File(...)):
 
 @app.post("/query", response_model=QueryResponse)
 async def query_dataset(req: QueryRequest):
+    question = (req.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
     try:
         sess = session_manager.get(req.session_id)
     except KeyError:
@@ -112,17 +117,18 @@ async def query_dataset(req: QueryRequest):
         )
 
     df = sess["df"]
-    profile_str = SchemaProfiler(df).to_prompt_string()
+    profile_str = sess.get("profile_str") or SchemaProfiler(df).to_prompt_string()
+    pickle_path = sess.get("pickle_path")
 
     try:
-        agent = build_agent(df, profile_str)
+        agent = build_agent(df, profile_str, pickle_path=pickle_path)
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to initialize data agent: {type(e).__name__}: {e}",
         )
 
-    result = run_with_self_correction(agent, req.question, sess["history"])
+    result = run_with_self_correction(agent, question, sess["history"])
 
     # Persist conversation turn
     session_manager.append_turn(req.session_id, "user", req.question)
